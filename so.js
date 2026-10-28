@@ -157,10 +157,10 @@ function setBar(valueId, barId, value, max = 100) {
   }
 
   if (barElement) {
-    const percentage = Math.max(
-      0,
-      Math.min(100, (Number(value) / max) * 100)
-    );
+    const numericValue = parseFloat(value);
+    const percentage = Number.isNaN(numericValue)
+      ? 0
+      : Math.max(0, Math.min(100, (numericValue / max) * 100));
 
     barElement.style.width = percentage + "%";
   }
@@ -205,7 +205,7 @@ function updatePatient() {
 
   updateAnasarque();
 
-  setBar("hp-val", "hp-bar", Math.round(state.hp));
+  setBar("hp-val", "hp-bar", Math.round(state.hp) + "%");
 
   // La jauge atteint 100 % visuel à 150 % d'hydratation.
   // La valeur numérique continue d'afficher la vraie valeur.
