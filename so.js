@@ -1,0 +1,696 @@
+// ==========================================
+// 🏥 MINI-JEU MÉDICAL - STREAMELEMENTS
+// ==========================================
+
+// IMAGES
+const IMAGES = {
+  TOP: "https://cdn.streamelements.com/uploads/01m588nq4zpbxypebmyd8twfrm.webp",
+  DESHYDRATEE: "https://cdn.streamelements.com/uploads/01m588rec4h4yq7yncyr2x2qgc.webp",
+  ANASARQUE: "https://cdn.streamelements.com/uploads/01m588r46sxsvg9pytfnepj8k0.webp",
+  HYPERTHERMIE: "https://cdn.streamelements.com/uploads/01m588rppt6ej3pqwzrrczhjmc.webp",
+  ERUPTION: "https://cdn.streamelements.com/uploads/01m588qvg1rb0daxmf3krzcts6.webp",
+  ETOUFFEMENT: "https://cdn.streamelements.com/uploads/01m588pvtx05yxm8hx5kddvd4v.webp",
+  INTUBEE_EVEILLEE: "https://cdn.streamelements.com/uploads/01m588qhxwsga6rncj4g0bvz8g.webp",
+  INTUBEE_SEDATEE: "https://cdn.streamelements.com/uploads/01m588p2erva65r8kfz2y2zkdg.webp",
+  ARRET_ASYSTOLIE: "https://cdn.streamelements.com/uploads/01m588pdjzf9s85r1bjaak6t16.webp"
+};
+
+// ==========================================
+// ⚙️ CONFIGURATION
+// ==========================================
+
+const HYDRO_MAX = 200;
+const ANASARQUE_SEUIL = 150;
+const ANASARQUE_SORTIE = 120;
+
+// ==========================================
+// ÉTAT DE LA PATIENTE
+// ==========================================
+
+const state = {
+  hp: 100,
+  hydro: 50,
+  temp: 37,
+  anasarque: false,
+  eruption: false,
+  ettouffement: false,
+  intubee: false,
+  sedatee: false,
+  arret: false
+};
+
+let gameInterval = null;
+
+// ==========================================
+// COMMANDES ET ALIAS
+// ==========================================
+
+function normalizeCommand(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/[!?.,;:]+$/, "")
+    .split(/\s+/)[0];
+}
+
+const COMMANDS = {
+  eau: [
+    "!eau", "!perfusion", "!perf", "!boire",
+    "!hydrater", "!hydratation"
+  ],
+
+  diuretique: [
+    "!lasilix", "!lasix", "!diuretique",
+    "!diuretik", "!diurese"
+  ],
+
+  doliprane: [
+    "!doliprane", "!doli", "!paracetamol",
+    "!paracetaml"
+  ],
+
+  creme: [
+    "!creme", "!cream", "!antihistaminique",
+    "!antihistaminik", "!soignereruption"
+  ],
+
+  heimlich: [
+    "!heimlich", "!heimlik", "!claque",
+    "!deboucher", "!desobstruer",
+    "!etouffement", "!etouffe"
+  ],
+
+  intuber: [
+    "!intuber", "!intubation", "!intube",
+    "!intubee", "!tube"
+  ],
+
+  sedater: [
+    "!hypnovel", "!sedater", "!sedate",
+    "!sedation", "!endormir", "!dormir", "!hypno"
+  ],
+
+  reveiller: [
+    "!reveiller", "!reveil", "!reveile",
+    "!reveille", "!reveillee", "!stopsedation"
+  ],
+
+  extuber: [
+    "!extuber", "!extubation", "!extube",
+    "!retirertube", "!retirertuyau"
+  ],
+
+  cpr: [
+    "!mace", "!cpr", "!massage", "!reanimer",
+    "!reanimation", "!massagecardiaque", "!rcr"
+  ],
+
+  manger: [
+    "!manger", "!repas", "!nourrir",
+    "!nourriture", "!miam", "!mange"
+  ],
+
+  sandwich: [
+    "!sandwich", "!sandwitch", "!sandwiche"
+  ],
+
+  cacahuetes: [
+    "!cacahuete", "!cacahuetes", "!cacahouete",
+    "!cacahouetes", "!cacahuette", "!cacahuettes",
+    "!arachide", "!arachides", "!peanut", "!peanuts"
+  ]
+};
+
+function matchesCommand(message, command) {
+  return COMMANDS[command].includes(message);
+}
+
+// ==========================================
+// JOURNAL DES ÉVÉNEMENTS
+// ==========================================
+
+function showLog(message) {
+  const log = document.getElementById("log-box");
+  if (!log) return;
+
+  const entry = document.createElement("div");
+  entry.textContent = message;
+  log.prepend(entry);
+
+  while (log.children.length > 6) {
+    log.removeChild(log.lastChild);
+  }
+}
+
+// ==========================================
+// BARRES ET AFFICHAGE
+// ==========================================
+
+function setBar(valueId, barId, value, max = 100) {
+  const valueElement = document.getElementById(valueId);
+  const barElement = document.getElementById(barId);
+
+  if (valueElement) {
+    valueElement.textContent = value;
+  }
+
+  if (barElement) {
+    const percentage = Math.max(
+      0,
+      Math.min(100, (Number(value) / max) * 100)
+    );
+
+    barElement.style.width = percentage + "%";
+  }
+}
+
+// ==========================================
+// DÉTECTION DE L'ANASARQUE
+// ==========================================
+
+function updateAnasarque() {
+  // L'anasarque apparaît à partir de 150 %.
+  if (state.hydro >= ANASARQUE_SEUIL && !state.anasarque) {
+    state.anasarque = true;
+
+    showLog(
+      "🚨 SURCHARGE HYDRIQUE : la patiente présente une ANASARQUE !"
+    );
+  }
+
+  // On conserve l'état tant que l'hydratation
+  // n'est pas redescendue à 120 % ou moins.
+  else if (
+    state.hydro <= ANASARQUE_SORTIE &&
+    state.anasarque
+  ) {
+    state.anasarque = false;
+
+    showLog(
+      "💧 La surcharge hydrique diminue. Fin de l'anasarque."
+    );
+  }
+}
+
+// ==========================================
+// MISE À JOUR DE LA PATIENTE
+// ==========================================
+
+function updatePatient() {
+  state.hp = Math.max(0, Math.min(100, state.hp));
+  state.hydro = Math.max(0, Math.min(HYDRO_MAX, state.hydro));
+  state.temp = Math.max(30, Math.min(45, state.temp));
+
+  updateAnasarque();
+
+  setBar("hp-val", "hp-bar", Math.round(state.hp));
+
+  // La jauge atteint 100 % visuel à 150 % d'hydratation.
+  // La valeur numérique continue d'afficher la vraie valeur.
+  setBar(
+    "hydro-val",
+    "hydro-bar",
+    Math.round(state.hydro) + "%",
+    ANASARQUE_SEUIL
+  );
+
+  setBar(
+    "temp-val",
+    "temp-bar",
+    state.temp.toFixed(1) + "°C",
+    42
+  );
+
+  const status = document.getElementById("patient-status");
+  const image = document.getElementById("patient-img");
+
+  let statusText = "Stable";
+  let imageUrl = IMAGES.TOP;
+  let statusClass = "";
+
+  // PRIORITÉ 1 : ARRÊT CARDIAQUE
+  if (state.arret) {
+    statusText = "🚨 ARRÊT CARDIAQUE";
+    imageUrl = IMAGES.ARRET_ASYSTOLIE;
+    statusClass = "critical";
+  }
+
+  // PRIORITÉ 2 : ÉTOUFFEMENT
+  else if (state.ettouffement) {
+    statusText = "😱 ÉTOUFFEMENT — !heimlich";
+    imageUrl = IMAGES.ETOUFFEMENT;
+    statusClass = "critical";
+  }
+
+  // PRIORITÉ 3 : INTUBATION ET SÉDATION
+  else if (state.intubee && state.sedatee) {
+    statusText = "😴 Intubée et sédatée";
+    imageUrl = IMAGES.INTUBEE_SEDATEE;
+    statusClass = "warning";
+  }
+
+  else if (state.intubee) {
+    statusText = "🫁 Intubée et éveillée";
+    imageUrl = IMAGES.INTUBEE_EVEILLEE;
+    statusClass = "warning";
+  }
+
+  // PRIORITÉ 4 : ANASARQUE
+  else if (state.anasarque) {
+    statusText = "💧 ANASARQUE";
+    imageUrl = IMAGES.ANASARQUE;
+    statusClass = "anasarque";
+  }
+
+  // PRIORITÉ 5 : HYPERTHERMIE
+  else if (state.temp >= 39) {
+    statusText = "🌡️ HYPERTHERMIE";
+    imageUrl = IMAGES.HYPERTHERMIE;
+    statusClass = "critical";
+  }
+
+  // PRIORITÉ 6 : DÉSHYDRATATION
+  else if (state.hydro <= 25) {
+    statusText = "💧 DÉSHYDRATATION";
+    imageUrl = IMAGES.DESHYDRATEE;
+    statusClass = "warning";
+  }
+
+  else if (state.hydro <= 50) {
+    statusText = "💧 Déshydratée";
+    imageUrl = IMAGES.DESHYDRATEE;
+    statusClass = "warning";
+  }
+
+  // PRIORITÉ 7 : SANTÉ GÉNÉRALE
+  else if (state.hp <= 30) {
+    statusText = "🩺 État critique";
+    imageUrl = IMAGES.ANASARQUE;
+    statusClass = "critical";
+  }
+
+  else if (state.eruption) {
+    statusText = "🔴 Éruption cutanée";
+    imageUrl = IMAGES.ERUPTION;
+    statusClass = "warning";
+  }
+
+  else if (state.hp <= 60 || state.temp >= 38) {
+    statusText = "🤒 Patiente malade";
+
+    imageUrl = state.temp >= 38
+      ? IMAGES.HYPERTHERMIE
+      : IMAGES.ANASARQUE;
+
+    statusClass = "warning";
+  }
+
+  if (status) {
+    status.textContent = statusText;
+    status.classList.remove("critical", "anasarque", "warning");
+
+    if (statusClass) {
+      status.classList.add(statusClass);
+    }
+  }
+
+  if (image && image.getAttribute("src") !== imageUrl) {
+    image.src = imageUrl;
+  }
+}
+
+// ==========================================
+// ARRÊT CARDIAQUE
+// ==========================================
+
+function triggerArret(reason) {
+  if (state.arret) return;
+
+  state.arret = true;
+
+  showLog(
+    "🚨 ARRÊT CARDIAQUE ! " +
+    (reason || "La patiente est en danger.")
+  );
+
+  updatePatient();
+}
+
+// ==========================================
+// ÉVOLUTION AUTOMATIQUE : TOUTES LES 15 S
+// ==========================================
+
+function gameTick() {
+  if (state.arret) {
+    updatePatient();
+    return;
+  }
+
+  // Diminution naturelle de l'hydratation.
+  state.hydro = Math.max(
+    0,
+    state.hydro - (state.sedatee ? 2 : 1)
+  );
+
+  // Perte progressive de santé.
+  if (!state.intubee && !state.sedatee) {
+    state.hp = Math.max(0, state.hp - 1);
+  }
+
+  // Retour progressif vers 37 °C.
+  if (state.temp > 37) {
+    state.temp = Math.max(37, state.temp - 0.1);
+  } else if (state.temp < 37) {
+    state.temp = Math.min(37, state.temp + 0.1);
+  }
+
+  // Risque d'arrêt cardiaque en cas d'étouffement.
+  if (state.ettouffement && Math.random() < 0.3) {
+    triggerArret("L'étouffement a provoqué un arrêt cardiaque !");
+    return;
+  }
+
+  if (state.hp <= 0) {
+    triggerArret("La patiente n'a plus de points de vie !");
+    return;
+  }
+
+  // Une déshydratation extrême fait perdre des PV.
+  if (state.hydro <= 0) {
+    state.hp = Math.max(0, state.hp - 3);
+  }
+
+  // Apparition aléatoire d'une éruption.
+  if (!state.eruption && Math.random() < 0.02) {
+    state.eruption = true;
+    showLog("🔴 Une éruption cutanée apparaît !");
+  }
+
+  updatePatient();
+}
+
+// ==========================================
+// TRAITEMENT DES COMMANDES TWITCH
+// ==========================================
+
+window.addEventListener("onEventReceived", function (obj) {
+  if (!obj || !obj.detail) return;
+
+  const listener = obj.detail.listener;
+
+  if (listener !== "message" && listener !== "chat-message") {
+    return;
+  }
+
+  const event = obj.detail.event || {};
+  const data = event.data || event;
+
+  const rawMessage = data.text || data.message || "";
+  const message = normalizeCommand(rawMessage);
+
+  const user =
+    data.displayName ||
+    data.nick ||
+    data.username ||
+    data.name ||
+    "Un viewer";
+
+  if (!message.startsWith("!")) return;
+
+  // ========================================
+  // NOURRITURE
+  // ========================================
+
+  const foodCommand =
+    matchesCommand(message, "manger") ||
+    matchesCommand(message, "sandwich") ||
+    matchesCommand(message, "cacahuetes");
+
+  if (foodCommand) {
+    if (state.arret || state.ettouffement) {
+      showLog("🚨 " + user + " : impossible de manger dans cet état !");
+    }
+
+    else if (state.intubee) {
+      showLog("🫁 " + user + " : patiente intubée, pas de nourriture !");
+    }
+
+    else if (Math.random() < 1 / 15) {
+      state.ettouffement = true;
+
+      if (matchesCommand(message, "sandwich")) {
+        showLog("🥪😱 " + user + " donne un sandwich : ÉTOUFFEMENT !");
+      } else if (matchesCommand(message, "cacahuetes")) {
+        showLog("🥜😱 " + user + " donne des cacahuètes : ÉTOUFFEMENT !");
+      } else {
+        showLog("🍎😱 " + user + " donne à manger : ÉTOUFFEMENT !");
+      }
+    }
+
+    else if (matchesCommand(message, "sandwich")) {
+      state.hp = Math.min(100, state.hp + 10);
+      showLog("🥪 " + user + " offre un sandwich : +10 PV !");
+    }
+
+    else if (matchesCommand(message, "cacahuetes")) {
+      state.hp = Math.min(100, state.hp + 3);
+      showLog("🥜 " + user + " donne des cacahuètes : +3 PV !");
+    }
+
+    else {
+      state.hp = Math.min(100, state.hp + 5);
+      showLog("🍎 " + user + " nourrit la patiente : +5 PV !");
+    }
+
+    updatePatient();
+    return;
+  }
+
+  // ========================================
+  // 💧 EAU / PERFUSION
+  // ========================================
+
+  if (matchesCommand(message, "eau")) {
+    if (state.arret || state.ettouffement || state.intubee) {
+      showLog("🚨 Impossible de faire boire la patiente !");
+    }
+
+    else {
+      const previousAnasarque = state.anasarque;
+
+      state.hydro = Math.min(HYDRO_MAX, state.hydro + 20);
+
+      showLog(
+        "💧 " + user +
+        " hydrate la patiente : +20 hydratation !"
+      );
+
+      updatePatient();
+
+      if (!previousAnasarque && state.anasarque) {
+        showLog("🚨 Trop d'eau ! La patiente passe en ANASARQUE !");
+      }
+
+      return;
+    }
+
+    updatePatient();
+    return;
+  }
+
+  // ========================================
+  // 💊 DIURÉTIQUE
+  // ========================================
+
+  else if (matchesCommand(message, "diuretique")) {
+    if (state.arret) {
+      showLog("🚨 Réanimez la patiente en priorité !");
+    }
+
+    else {
+      state.hydro = Math.max(0, state.hydro - 20);
+
+      showLog("💊 " + user + " administre un diurétique : -20 hydratation !");
+    }
+  }
+
+  // ========================================
+  // 🌡️ PARACÉTAMOL
+  // ========================================
+
+  else if (matchesCommand(message, "doliprane")) {
+    if (state.arret) {
+      showLog("🚨 Réanimez la patiente en priorité !");
+    }
+
+    else {
+      state.temp = Math.max(36, state.temp - 1.5);
+      showLog("🌡️ " + user + " administre du paracétamol : -1,5 °C !");
+    }
+  }
+
+  // ========================================
+  // 🧴 CRÈME / ANTIHISTAMINIQUE
+  // ========================================
+
+  else if (matchesCommand(message, "creme")) {
+    if (state.arret) {
+      showLog("🚨 Réanimez la patiente en priorité !");
+    }
+
+    else if (!state.eruption) {
+      showLog("ℹ️ Aucune éruption à traiter !");
+    }
+
+    else {
+      state.eruption = false;
+      showLog("🧴 " + user + " traite l'éruption cutanée !");
+    }
+  }
+
+  // ========================================
+  // 🫁 INTUBATION
+  // ========================================
+
+  else if (matchesCommand(message, "intuber")) {
+    if (state.arret || state.ettouffement) {
+      showLog("🚨 Stabilisez la patiente avant l'intubation !");
+    }
+
+    else if (state.intubee) {
+      showLog("🫁 La patiente est déjà intubée !");
+    }
+
+    else if (state.hp < 40) {
+      state.intubee = true;
+      showLog("🫁 " + user + " intube la patiente !");
+    }
+
+    else {
+      showLog("ℹ️ Il faut moins de 40 PV pour intuber la patiente !");
+    }
+  }
+
+  // ========================================
+  // 😴 SÉDATION
+  // ========================================
+
+  else if (matchesCommand(message, "sedater")) {
+    if (state.arret || state.ettouffement) {
+      showLog("🚨 Stabilisez la patiente avant la sédation !");
+    }
+
+    else if (!state.intubee) {
+      showLog("ℹ️ Il faut intuber la patiente avant de la sédater !");
+    }
+
+    else if (state.sedatee) {
+      showLog("😴 La patiente est déjà sédatée !");
+    }
+
+    else {
+      state.sedatee = true;
+      showLog("😴 " + user + " séd ate la patiente !");
+    }
+  }
+
+  // ========================================
+  // 🌞 RÉVEIL
+  // ========================================
+
+  else if (matchesCommand(message, "reveiller")) {
+    if (state.arret || state.ettouffement) {
+      showLog("🚨 Stabilisez la patiente avant le réveil !");
+    }
+
+    else if (!state.sedatee) {
+      showLog("ℹ️ La patiente n'est pas sédatée !");
+    }
+
+    else {
+      state.sedatee = false;
+      showLog("🌞 " + user + " réveille la patiente !");
+    }
+  }
+
+  // ========================================
+  // 🫁 EXTUBATION
+  // ========================================
+
+  else if (matchesCommand(message, "extuber")) {
+    if (state.arret || state.ettouffement) {
+      showLog("🚨 Stabilisez la patiente avant l'extubation !");
+    }
+
+    else if (!state.intubee) {
+      showLog("🫁 La patiente n'est pas intubée !");
+    }
+
+    else if (state.sedatee) {
+      showLog("😴 Réveillez-la d'abord avec !reveiller !");
+    }
+
+    else if (state.hp < 50) {
+      showLog("ℹ️ Il faut au moins 50 PV pour extuber la patiente !");
+    }
+
+    else {
+      state.intubee = false;
+      showLog("🫁 " + user + " extube la patiente !");
+    }
+  }
+
+  // ========================================
+  // 🆘 MANŒUVRE DE HEIMLICH
+  // ========================================
+
+  else if (matchesCommand(message, "heimlich")) {
+    if (!state.ettouffement) {
+      showLog("ℹ️ La patiente ne s'étouffe pas !");
+    }
+
+    else {
+      state.ettouffement = false;
+      state.hp = Math.min(100, state.hp + 15);
+
+      showLog("🆘 " + user + " réalise la manœuvre de Heimlich : +15 PV !");
+    }
+  }
+
+  // ========================================
+  // ❤️ RÉANIMATION
+  // ========================================
+
+  else if (matchesCommand(message, "cpr")) {
+    if (!state.arret) {
+      showLog("ℹ️ La patiente n'est pas en arrêt cardiaque !");
+    }
+
+    else {
+      state.arret = false;
+      state.ettouffement = false;
+      state.hp = Math.max(30, state.hp);
+      state.hydro = Math.max(30, state.hydro);
+      state.temp = Math.max(37, Math.min(38, state.temp));
+
+      showLog("❤️ " + user + " réanime la patiente ! Elle est stabilisée !");
+    }
+  }
+
+  // Mise à jour après chaque commande.
+  updatePatient();
+});
+
+// ==========================================
+// INITIALISATION
+// ==========================================
+
+updatePatient();
+
+if (gameInterval !== null) {
+  clearInterval(gameInterval);
+}
+
+gameInterval = setInterval(gameTick, 15000);

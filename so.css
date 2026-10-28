@@ -1,0 +1,137 @@
+.patient-container {
+    width: 320px;
+    box-sizing: border-box;
+    background: rgba(20, 25, 40, 0.95);
+    border: 2px solid #4a6fa5;
+    border-radius: 16px;
+    padding: 12px;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.patient-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.patient-title {
+    font-weight: bold;
+    font-size: 14px;
+    color: #70a1ff;
+}
+
+.patient-status-badge {
+    max-width: 175px;
+    background: #2ed573;
+    color: #17202a;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 4px 8px;
+    border-radius: 10px;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.patient-status-badge.critical {
+    background: #ff4757;
+    color: #fff;
+}
+
+.patient-status-badge.anasarque {
+    background: #70a1ff;
+    color: #101828;
+}
+
+.patient-status-badge.warning {
+    background: #ffa502;
+    color: #222;
+}
+
+.patient-card {
+    width: 100%;
+    height: 220px;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.patient-card img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.stats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stat-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    margin-bottom: 3px;
+    color: #c8d6e5;
+}
+
+.bar-bg {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    width: 0;
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease, background-color 0.4s ease;
+}
+
+.bar-fill.hp {
+    background: #2ed573;
+}
+
+.bar-fill.hydro {
+    background: #1e90ff;
+}
+
+.bar-fill.temp {
+    background: #ff4757;
+}
+
+.log-box {
+    margin-top: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    text-align: center;
+    color: #eccc68;
+    min-height: 16px;
+    overflow-wrap: anywhere;
+    font-style: italic;
+}
+
+@media (max-width: 330px) {
+    .patient-container {
+        width: 100%;
+    }
+
+    .patient-title {
+        font-size: 12px;
+    }
+}
